@@ -39,11 +39,17 @@ object BenchmarkConfig {
     )
 
     val workloadParams = {
+      val tccConfig = workload.getConfig("table-commits-creator")
       val rtdConfig = workload.getConfig("read-tree-dataset")
       val ctdConfig = workload.getConfig("create-tree-dataset")
       val rutdConfig = workload.getConfig("read-update-tree-dataset")
 
       WorkloadParameters(
+        TableCommitsCreatorParameters(
+          tccConfig.getInt("commits-throughput"),
+          tccConfig.getInt("read-throughput"),
+          tccConfig.getInt("duration-in-minutes")
+        ),
         ReadTreeDatasetParameters(
           rtdConfig.getInt("table-concurrency"),
           rtdConfig.getInt("view-concurrency")
