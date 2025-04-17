@@ -121,6 +121,14 @@ case class CatalogActions(
       .check(jsonPath("$.storageConfigInfo.allowedLocations[0]").is("#{defaultBaseLocation}"))
   )
 
+  val deleteCatalog: ChainBuilder = exec(
+    http("Delete Catalog")
+      .delete("/api/management/v1/catalogs/#{catalogName}")
+      .header("Authorization", "Bearer #{accessToken}")
+      .header("Content-Type", "application/json")
+      .check(status.is(204))
+  )
+
   /**
    * Lists all available Iceberg catalogs in the deployment. This operation does not rely on any
    * feeder data.
