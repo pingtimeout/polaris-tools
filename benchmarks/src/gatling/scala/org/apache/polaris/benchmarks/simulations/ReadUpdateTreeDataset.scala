@@ -68,7 +68,7 @@ class ReadUpdateTreeDataset extends Simulation {
   // * Stop the token refresh loop
   // --------------------------------------------------------------------------------
   val continuouslyRefreshOauthToken: ScenarioBuilder =
-    scenario("Authenticate every minute using the Dremio REST API")
+    scenario("Authenticate every minute using the Iceberg REST API")
       .asLongAs(_ => shouldRefreshToken.get())(
         feed(authActions.feeder())
           .exec(authActions.authenticateAndSaveAccessToken)
