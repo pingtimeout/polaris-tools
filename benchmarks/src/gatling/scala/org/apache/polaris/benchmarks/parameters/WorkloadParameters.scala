@@ -20,35 +20,7 @@
 package org.apache.polaris.benchmarks.parameters
 
 case class WorkloadParameters(
-    readWriteRatio: Double,
-    updatesPerNamespace: Int,
-    updatesPerTable: Int,
-    updatesPerView: Int,
-    seed: Long,
     readTreeDataset: ReadTreeDatasetParameters,
     createTreeDataset: CreateTreeDatasetParameters,
     readUpdateTreeDataset: ReadUpdateTreeDatasetParameters
-) {
-  require(
-    readWriteRatio >= 0.0 && readWriteRatio <= 1.0,
-    "Read/write ratio must be between 0.0 and 1.0 inclusive"
-  )
-
-  require(
-    updatesPerNamespace >= 0,
-    "Updates per namespace must be non-negative"
-  )
-
-  require(
-    updatesPerTable >= 0,
-    "Updates per table must be non-negative"
-  )
-
-  require(
-    updatesPerView >= 0,
-    "Updates per view must be non-negative"
-  )
-
-  val gatlingReadRatio: Double = readWriteRatio * 100
-  val gatlingWriteRatio: Double = (1 - readWriteRatio) * 100
-}
+) {}
