@@ -56,15 +56,7 @@ public class CreateOmnipotentPrincipalCommand implements Callable<Integer> {
   @CommandLine.Option(
           names = {"--polaris-api-connection-properties"},
           required = true,
-          description = "The connection properties to connect to the Polaris API." +
-                  "\nProperties:" +
-                  "\n\t- base-url: the base url of the Polaris instance (eg. http://localhost:8181)" +
-                  "\n\t- bearer-token: the bearer token to authenticate against the Polaris instance with. Must " +
-                    "be provided if any of oauth2-server-uri, client-id, client-secret, or scope are not provided." +
-                  "\n\t- oauth2-server-uri: the uri of the OAuth2 server to authenticate to. (eg. http://localhost:8181/api/catalog/v1/oauth/tokens)" +
-                  "\n\t- client-id: the client id belonging to a service admin to authenticate with" +
-                  "\n\t- client-secret: the client secret belong to a service admin to authenticate with" +
-                  "\n\t- scope: the scope to authenticate with for the service_admin (eg. PRINCIPAL_ROLE:ALL)"
+          description = CLIUtil.API_SERVICE_PROPERTIES_DESCRIPTION
   )
   private Map<String, String> polarisApiConnectionProperties;
 
@@ -96,99 +88,101 @@ public class CreateOmnipotentPrincipalCommand implements Callable<Integer> {
     polarisApiConnectionProperties.putIfAbsent(PolarisApiService.ICEBERG_WRITE_ACCESS_PROPERTY,
             String.valueOf(withWriteAccess));
 
-    PolarisService polaris = PolarisServiceFactory.createPolarisService(
-            PolarisServiceFactory.ServiceType.API, polarisApiConnectionProperties);
+    try (PolarisService polaris = PolarisServiceFactory.createPolarisService(
+            PolarisServiceFactory.ServiceType.API, polarisApiConnectionProperties)) {
 
-    AccessControlService accessControlService = new AccessControlService((PolarisApiService) polaris);
+      AccessControlService accessControlService = new AccessControlService((PolarisApiService) polaris);
 
-    PrincipalWithCredentials principalWithCredentials;
+      PrincipalWithCredentials principalWithCredentials;
 
-    try {
-      principalWithCredentials = accessControlService.createOmnipotentPrincipal(replace);
-    } catch (Exception e) {
-      consoleLog.error("Failed to create omnipotent principal.", e);
-      return 1;
+      try {
+        principalWithCredentials = accessControlService.createOmnipotentPrincipal(replace);
+      } catch (Exception e) {
+        consoleLog.error("Failed to create omnipotent principal.", e);
+        return 1;
+      }
+
+      consoleLog.info(
+              "Created omnipotent principal {}.", principalWithCredentials.getPrincipal().getName());
+
+      PrincipalRole principalRole;
+
+      try {
+        principalRole =
+                accessControlService.createAndAssignPrincipalRole(principalWithCredentials, replace);
+      } catch (Exception e) {
+        consoleLog.error("Failed to create omnipotent principal role and assign it to principal.", e);
+        return 1;
+      }
+
+      consoleLog.info(
+              "Created omnipotent principal role {} and assigned it to omnipotent principal {}.",
+              principalWithCredentials.getPrincipal().getName(),
+              principalRole.getName());
+
+      List<Catalog> catalogs = polaris.listCatalogs();
+
+      consoleLog.info("Identified {} catalogs to create catalog roles for.", catalogs.size());
+
+      final String permissionLevel = withWriteAccess ? "write" : "readonly";
+
+      AtomicInteger completedCatalogSetups = new AtomicInteger(0);
+
+      Queue<Catalog> failedCatalogs = new ConcurrentLinkedQueue<>();
+
+      ExecutorService executor = Executors.newFixedThreadPool(concurrency);
+
+      List<CompletableFuture<Void>> futures = new ArrayList<>();
+
+      for (Catalog catalog : catalogs) {
+        CompletableFuture<Void> future =
+                CompletableFuture.runAsync(
+                        () -> {
+                          try {
+                            accessControlService.setupOmnipotentRoleForCatalog(
+                                    catalog.getName(), principalRole, replace, withWriteAccess);
+                          } catch (Exception e) {
+                            failedCatalogs.add(catalog);
+                            consoleLog.error(
+                                    "Failed to setup omnipotent catalog role for catalog {} with {} access. - {}/{}",
+                                    catalog.getName(),
+                                    permissionLevel,
+                                    completedCatalogSetups.incrementAndGet(),
+                                    catalogs.size(),
+                                    e);
+                            return;
+                          }
+
+                          consoleLog.info(
+                                  "Finished omnipotent principal setup for catalog {} with {} access. - {}/{}",
+                                  catalog.getName(),
+                                  permissionLevel,
+                                  completedCatalogSetups.incrementAndGet(),
+                                  catalogs.size());
+                        },
+                        executor);
+
+        futures.add(future);
+      }
+
+      futures.forEach(CompletableFuture::join);
+
+      consoleLog.info(
+              "Encountered issues creating catalog roles for the following catalogs: {}",
+              failedCatalogs.stream().map(Catalog::getName).toList());
+
+      consoleLog.info(
+              "\n======================================================\n"
+                      + "Omnipotent Principal Credentials:\n"
+                      + "\tname = {}\n"
+                      + "\tclientId = {}\n"
+                      + "\tclientSecret = {}\n"
+                      + "======================================================",
+              principalWithCredentials.getPrincipal().getName(),
+              principalWithCredentials.getCredentials().getClientId(),
+              principalWithCredentials.getCredentials().getClientSecret());
+
     }
-
-    consoleLog.info(
-        "Created omnipotent principal {}.", principalWithCredentials.getPrincipal().getName());
-
-    PrincipalRole principalRole;
-
-    try {
-      principalRole =
-          accessControlService.createAndAssignPrincipalRole(principalWithCredentials, replace);
-    } catch (Exception e) {
-      consoleLog.error("Failed to create omnipotent principal role and assign it to principal.", e);
-      return 1;
-    }
-
-    consoleLog.info(
-        "Created omnipotent principal role {} and assigned it to omnipotent principal {}.",
-        principalWithCredentials.getPrincipal().getName(),
-        principalRole.getName());
-
-    List<Catalog> catalogs = polaris.listCatalogs();
-
-    consoleLog.info("Identified {} catalogs to create catalog roles for.", catalogs.size());
-
-    final String permissionLevel = withWriteAccess ? "write" : "readonly";
-
-    AtomicInteger completedCatalogSetups = new AtomicInteger(0);
-
-    Queue<Catalog> failedCatalogs = new ConcurrentLinkedQueue<>();
-
-    ExecutorService executor = Executors.newFixedThreadPool(concurrency);
-
-    List<CompletableFuture<Void>> futures = new ArrayList<>();
-
-    for (Catalog catalog : catalogs) {
-      CompletableFuture<Void> future =
-          CompletableFuture.runAsync(
-              () -> {
-                try {
-                  accessControlService.setupOmnipotentRoleForCatalog(
-                      catalog.getName(), principalRole, replace, withWriteAccess);
-                } catch (Exception e) {
-                  failedCatalogs.add(catalog);
-                  consoleLog.error(
-                      "Failed to setup omnipotent catalog role for catalog {} with {} access. - {}/{}",
-                      catalog.getName(),
-                      permissionLevel,
-                      completedCatalogSetups.incrementAndGet(),
-                      catalogs.size(),
-                      e);
-                  return;
-                }
-
-                consoleLog.info(
-                    "Finished omnipotent principal setup for catalog {} with {} access. - {}/{}",
-                    catalog.getName(),
-                    permissionLevel,
-                    completedCatalogSetups.incrementAndGet(),
-                    catalogs.size());
-              },
-              executor);
-
-      futures.add(future);
-    }
-
-    futures.forEach(CompletableFuture::join);
-
-    consoleLog.info(
-        "Encountered issues creating catalog roles for the following catalogs: {}",
-        failedCatalogs.stream().map(Catalog::getName).toList());
-
-    consoleLog.info(
-        "\n======================================================\n"
-            + "Omnipotent Principal Credentials:\n"
-            + "\tname = {}\n"
-            + "\tclientId = {}\n"
-            + "\tclientSecret = {}\n"
-            + "======================================================",
-        principalWithCredentials.getPrincipal().getName(),
-        principalWithCredentials.getCredentials().getClientId(),
-        principalWithCredentials.getCredentials().getClientSecret());
 
     return 0;
   }

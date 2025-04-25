@@ -18,8 +18,6 @@
  */
 package org.apache.polaris.tools.sync.polaris;
 
-import java.io.Closeable;
-import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import org.apache.polaris.tools.sync.polaris.catalog.ETagManager;
@@ -49,42 +47,14 @@ public class SyncPolarisCommand implements Callable<Integer> {
   @CommandLine.Option(
           names = {"--source-properties"},
           required = true,
-          description = "Properties to initialize Polaris entity source." +
-                  "\nProperties:" +
-                  "\n\t- base-url: the base url of the Polaris instance (eg. http://localhost:8181)" +
-                  "\n\t- bearer-token: the bearer token to authenticate against the Polaris instance with. Must " +
-                  "be provided if any of oauth2-server-uri, client-id, client-secret, or scope are not provided." +
-                  "\n\t- oauth2-server-uri: the uri of the OAuth2 server to authenticate to. (eg. http://localhost:8181/api/catalog/v1/oauth/tokens)" +
-                  "\n\t- client-id: the client id belonging to a service admin to authenticate with" +
-                  "\n\t- client-secret: the client secret belong to a service admin to authenticate with" +
-                  "\n\t- scope: the scope to authenticate with for the service_admin (eg. PRINCIPAL_ROLE:ALL)" +
-                  "\nOmnipotent Principal Properties:" +
-                  "\n\t- omnipotent-principal-name: the name of the omnipotent principal created using create-omnipotent-principal on the source Polaris" +
-                  "\n\t- omnipotent-principal-client-id: the client id of the omnipotent principal created using create-omnipotent-principal on the source Polaris" +
-                  "\n\t- omnipotent-principal-client-secret: the client secret of the omnipotent principal created using create-omnipotent-principal on the source Polaris" +
-                  "\n\t- omnipotent-principal-oauth2-server-uri: (default: /v1/oauth/tokens endpoint for provided Polaris base-url) "
-                    + "the OAuth2 server to use to authenticate the omnipotent-principal for Iceberg catalog access"
+          description = CLIUtil.API_SERVICE_PROPERTIES_DESCRIPTION + CLIUtil.OMNIPOTENT_PRINCIPAL_PROPERTIES_DESCRIPTION
   )
   private Map<String, String> sourceProperties;
 
   @CommandLine.Option(
           names = {"--target-properties"},
           required = true,
-          description = "Properties to initialize Polaris entity target." +
-                  "\nProperties:" +
-                  "\n\t- base-url: the base url of the Polaris instance (eg. http://localhost:8181)" +
-                  "\n\t- bearer-token: the bearer token to authenticate against the Polaris instance with. Must " +
-                  "be provided if any of oauth2-server-uri, client-id, client-secret, or scope are not provided." +
-                  "\n\t- oauth2-server-uri: the uri of the OAuth2 server to authenticate to. (eg. http://localhost:8181/api/catalog/v1/oauth/tokens)" +
-                  "\n\t- client-id: the client id belonging to a service admin to authenticate with" +
-                  "\n\t- client-secret: the client secret belong to a service admin to authenticate with" +
-                  "\n\t- scope: the scope to authenticate with for the service_admin (eg. PRINCIPAL_ROLE:ALL)" +
-                  "\nOmnipotent Principal Properties:" +
-                  "\n\t- omnipotent-principal-name: the name of the omnipotent principal created using create-omnipotent-principal on the target Polaris" +
-                  "\n\t- omnipotent-principal-client-id: the client id of the omnipotent principal created using create-omnipotent-principal on the target Polaris" +
-                  "\n\t- omnipotent-principal-client-secret: the client secret of the omnipotent principal created using create-omnipotent-principal on the target Polaris" +
-                  "\n\t- omnipotent-principal-oauth2-server-uri: (default: /v1/oauth/tokens endpoint for provided Polaris base-url) "
-                  + "the OAuth2 server to use to retrieve a bearer token for the omnipotent-principal"
+          description = CLIUtil.API_SERVICE_PROPERTIES_DESCRIPTION + CLIUtil.OMNIPOTENT_PRINCIPAL_PROPERTIES_DESCRIPTION
   )
   private Map<String, String> targetProperties;
 
@@ -130,41 +100,29 @@ public class SyncPolarisCommand implements Callable<Integer> {
     sourceProperties.put(PolarisApiService.ICEBERG_WRITE_ACCESS_PROPERTY, Boolean.toString(false));
     targetProperties.put(PolarisApiService.ICEBERG_WRITE_ACCESS_PROPERTY, Boolean.toString(true));
 
-    PolarisService source =
-            PolarisServiceFactory.createPolarisService(PolarisServiceFactory.ServiceType.API, sourceProperties);
-    PolarisService target =
-            PolarisServiceFactory.createPolarisService(PolarisServiceFactory.ServiceType.API, targetProperties);
-
-    ETagManager etagService = ETagManagerFactory.createETagManager(etagManagerType, etagManagerProperties);
-
-    Runtime.getRuntime()
-        .addShutdownHook(
-            new Thread(
-                () -> {
-                  if (etagService instanceof Closeable closableETagService) {
-                    try {
-                      closableETagService.close();
-                    } catch (IOException e) {
-                      throw new RuntimeException(e);
-                    }
-                  }
-                }));
-
-    PolarisSynchronizer synchronizer =
-        new PolarisSynchronizer(
-            consoleLog,
-            haltOnFailure,
-            accessControlAwarePlanner,
-            source,
-            target,
-            etagService);
-    synchronizer.syncPrincipalRoles();
-    if (shouldSyncPrincipals) {
-      consoleLog.warn("Principal migration will reset credentials on the target Polaris instance. " +
-              "Principal migration will log the new target Principal credentials to stdout.");
-      synchronizer.syncPrincipals();
+    try (
+            PolarisService source = PolarisServiceFactory.createPolarisService(
+                    PolarisServiceFactory.ServiceType.API, sourceProperties);
+            PolarisService target = PolarisServiceFactory.createPolarisService(
+                    PolarisServiceFactory.ServiceType.API, targetProperties);
+            ETagManager etagManager = ETagManagerFactory.createETagManager(etagManagerType, etagManagerProperties)
+    ) {
+      PolarisSynchronizer synchronizer =
+              new PolarisSynchronizer(
+                      consoleLog,
+                      haltOnFailure,
+                      accessControlAwarePlanner,
+                      source,
+                      target,
+                      etagManager);
+      synchronizer.syncPrincipalRoles();
+      if (shouldSyncPrincipals) {
+        consoleLog.warn("Principal migration will reset credentials on the target Polaris instance. " +
+                "Principal migration will log the new target Principal credentials to stdout.");
+        synchronizer.syncPrincipals();
+      }
+      synchronizer.syncCatalogs();
     }
-    synchronizer.syncCatalogs();
 
     return 0;
   }
