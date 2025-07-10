@@ -173,7 +173,7 @@ case class NamespaceActions(
    * There is no limit to the number of users that can fetch namespaces concurrently.
    */
   val fetchNamespace: ChainBuilder = exec(
-    http("Fetch Namespace")
+    http("Fetch single namespace")
       .get("/api/catalog/v1/#{catalogName}/namespaces/#{namespaceMultipartPath}")
       .header("Authorization", "Bearer #{accessToken}")
       .check(status.is(200))
@@ -206,15 +206,15 @@ case class NamespaceActions(
    * structure.
    */
   val fetchAllChildrenNamespaces: ChainBuilder = exec(
-    http("Fetch all Namespaces under specific parent")
+    http("Fetch child namespaces")
       .get("/api/catalog/v1/#{catalogName}/namespaces?parent=#{namespaceMultipartPath}")
       .header("Authorization", "Bearer #{accessToken}")
       .check(status.is(200))
   )
 
   val updateNamespaceProperties: ChainBuilder =
-    retryOnHttpStatus(maxRetries, retryableHttpCodes, "Update namespace properties")(
-      http("Update Namespace Properties")
+    retryOnHttpStatus(maxRetries, retryableHttpCodes, "Update namespace")(
+      http("Update namespace")
         .post("/api/catalog/v1/#{catalogName}/namespaces/#{namespaceMultipartPath}/properties")
         .header("Authorization", "Bearer #{accessToken}")
         .header("Content-Type", "application/json")

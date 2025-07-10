@@ -48,6 +48,22 @@ case class NAryTreeBuilder(nsWidth: Int, nsDepth: Int) {
     }
 
   /**
+   * Computes the ordinals of all child nodes for a given node.
+   *
+   * @param ordinal the ordinal of the parent node
+   * @return a list of ordinals representing the child nodes
+   */
+  def childrenOf(ordinal: Int): List[Int] =
+    if (depthOf(ordinal) >= nsDepth - 1) {
+      // Node is a leaf, has no children
+      List.empty
+    } else {
+      // For a node with ordinal p, its children have ordinals: p*nsWidth + 1, p*nsWidth + 2, ..., p*nsWidth + nsWidth
+      val firstChild = ordinal * nsWidth + 1
+      (firstChild until firstChild + nsWidth).toList
+    }
+
+  /**
    * Calculates the depth of a node in the n-ary tree based on its ordinal.
    *
    * @param ordinal The ordinal of the node.
@@ -100,4 +116,21 @@ case class NAryTreeBuilder(nsWidth: Int, nsDepth: Int) {
     val lastLevel = nsDepth - 1
     math.pow(nsWidth, lastLevel).toInt
   }
+
+  /**
+   * Computes the ordinals of all sibling nodes for a given node.
+   *
+   * @param ordinal the ordinal of the node
+   * @return a list of ordinals representing the sibling nodes (excluding the node itself)
+   */
+  def siblingsOf(ordinal: Int): List[Int] =
+    if (ordinal == 0) {
+      // Root node has no siblings
+      List.empty
+    } else {
+      // Get parent ordinal
+      val parent = (ordinal - 1) / nsWidth
+      // Get all children of parent (siblings including self) and exclude self
+      childrenOf(parent).filter(_ != ordinal)
+    }
 }
