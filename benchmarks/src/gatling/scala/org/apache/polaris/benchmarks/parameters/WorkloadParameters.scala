@@ -23,5 +23,6 @@ case class WorkloadParameters(
     createCommits: CreateCommitsParameters,
     readTreeDataset: ReadTreeDatasetParameters,
     createTreeDataset: CreateTreeDatasetParameters,
-    readUpdateTreeDataset: ReadUpdateTreeDatasetParameters
+    readUpdateTreeDataset: ReadUpdateTreeDatasetParameters,
+    weightedWorkloadOnTreeDataset: WeightedWorkloadOnTreeDatasetParameters
 ) {}
