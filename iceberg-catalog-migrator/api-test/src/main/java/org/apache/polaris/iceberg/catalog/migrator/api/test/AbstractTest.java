@@ -18,6 +18,7 @@
  */
 package org.apache.polaris.iceberg.catalog.migrator.api.test;
 
+import java.io.File;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -55,8 +56,8 @@ public abstract class AbstractTest {
   protected static final Namespace NS_A_B_C_D = Namespace.of("a", "b", "c", "d");
   protected static final Namespace NS_A_B_C_D_E = Namespace.of("a", "b", "c", "d", "e");
 
-  private static String sourceCatalogWarehouse;
-  private static String targetCatalogWarehouse;
+  protected static String sourceCatalogWarehouse;
+  protected static String targetCatalogWarehouse;
 
   protected static Catalog sourceCatalog;
   protected static Catalog targetCatalog;
@@ -73,7 +74,9 @@ public abstract class AbstractTest {
   protected static void initLogDir() {
     System.setProperty("catalog.migration.log.dir", logDir.toAbsolutePath().toString());
     sourceCatalogWarehouse = tempDir.resolve("sourceCatalogWarehouse").toAbsolutePath().toString();
+    ensureDirectoryExists(sourceCatalogWarehouse);
     targetCatalogWarehouse = tempDir.resolve("targetCatalogWarehouse").toAbsolutePath().toString();
+    ensureDirectoryExists(targetCatalogWarehouse);
   }
 
   @AfterAll
@@ -155,5 +158,14 @@ public abstract class AbstractTest {
     properties.put("warehouse", isSourceCatalog ? sourceCatalogWarehouse : targetCatalogWarehouse);
     properties.putAll(dynamicProperties);
     return properties;
+  }
+
+  private static void ensureDirectoryExists(String path) {
+    File dir = new File(path);
+    if (!dir.exists()) {
+      if (!dir.mkdirs()) {
+        throw new RuntimeException("Unable to create directory: " + path);
+      }
+    }
   }
 }

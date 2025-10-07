@@ -32,13 +32,11 @@ import java.util.Map;
 import nl.altindag.log.LogCaptor;
 import nl.altindag.log.model.LogEvent;
 import org.apache.iceberg.catalog.Catalog;
-import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.polaris.iceberg.catalog.migrator.api.CatalogMigrationUtil;
 import org.apache.polaris.iceberg.catalog.migrator.api.CatalogMigrator;
 import org.apache.polaris.iceberg.catalog.migrator.api.test.AbstractTest;
 import org.assertj.core.api.Assertions;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.io.TempDir;
@@ -83,6 +81,9 @@ public abstract class AbstractCLIMigrationTest extends AbstractTest {
       case HIVE:
         properties = hiveCatalogProperties(isSourceCatalog, additionalProp);
         break;
+      case REST:
+        properties = additionalProp;
+        break;
       default:
         throw new UnsupportedOperationException(
             String.format("Unsupported for catalog type: %s", catalogType));
@@ -106,11 +107,6 @@ public abstract class AbstractCLIMigrationTest extends AbstractTest {
     }
   }
 
-  @AfterAll
-  protected static void tearDown() throws Exception {
-    dropNamespaces();
-  }
-
   @BeforeEach
   protected void beforeEach() {
     createTables();
@@ -118,12 +114,6 @@ public abstract class AbstractCLIMigrationTest extends AbstractTest {
 
   @AfterEach
   protected void afterEach() {
-    // manually refreshing catalog due to missing refresh in Nessie catalog
-    // https://github.com/apache/iceberg/pull/6789
-    // create table will call refresh internally.
-    sourceCatalog.createTable(TableIdentifier.of(BAR, "tblx"), schema).refresh();
-    targetCatalog.createTable(TableIdentifier.of(BAR, "tblx"), schema).refresh();
-
     dropTables();
   }
 
